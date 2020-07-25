@@ -1,0 +1,19 @@
+{
+  "name": "youtube-looper",
+  "version": "0.0.1",
+  "description": "loop ur yerterb",
+  "main": "YoutubeLooper.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "youtube",
+    "loop",
+    "you",
+    "tube",
+    "loo",
+    "p"
+  ],
+  "author": "Neal Tucker",
+  "license": "ISC"
+}
