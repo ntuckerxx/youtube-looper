@@ -4,7 +4,9 @@
   "description": "loop ur yerterb",
   "main": "YoutubeLooper.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "bundler": "webpack --watch testclient/main.js --devtool source-map --resolve-alias ./YoutubeLooper.js=../YoutubeLooper.js --output-path dist -o testclient/bundle.js",
+    "build-dist": "webpack src/client/main.js --devtool source-map --output-path dist -o dist/bundle.js"
   },
   "keywords": [
     "youtube",
