@@ -1,6 +1,6 @@
 {
   "name": "youtube-looper",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "loop ur yerterb",
   "main": "YoutubeLooper.js",
   "scripts": {
