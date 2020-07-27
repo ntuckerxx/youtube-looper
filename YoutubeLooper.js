@@ -122,6 +122,8 @@ class Looper {
         this.playerElems.push(document.createElement("div"));
         elem.appendChild(this.playerElems[0]);
         elem.appendChild(this.playerElems[1]);
+        this.playerElems[0].style = "position: absolute; left: 0; top: 0;"
+        this.playerElems[1].style = "position: absolute; left: 0; top: 0;"
         this.name = "looper";
     }
 
@@ -214,6 +216,9 @@ class Looper {
         if(this.IsPlaying()) {
             console.log("IsPlaying (sync)")
             var player = this.Player().getPlayer();
+
+            this.Player().p.f.style.display = null;
+            this.NextPlayer().p.f.style.display = "none";
 
             this.speed = player.getPlaybackRate();
             console.log("speed is ", this.speed);
