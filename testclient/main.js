@@ -18,6 +18,9 @@ elements.buttons.end.addEventListener("click", (e) => {
     l.SetEnd();
 });
 elements.buttons.load.addEventListener("click", (e) => {
-    l.LoadURL(elements.urlinput.value);
+    l.LoadURL(elements.urlinput.value)
+    .catch((e) => {
+        alert(e);
+    });
 });
 window.l = l;

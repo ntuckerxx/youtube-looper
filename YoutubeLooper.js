@@ -1,16 +1,117 @@
 var YTAPI = require("./YoutubeAPI");
 
+//[38.154713204086306, 47.94230197901916]
 var testStart = 133.47629999999998;
 var testEnd = 138.7385;
 var testID = 'aa2C0gf4lls';
+var wrapperNames = ["first", "second"]
+
+function parseIdFromYoutubeURL(url) {
+    var regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+    var match = url.match(regExp);
+    return (match&&match[7].length==11)? match[7] : false;
+}
+
+class AsyncPlayerWrapper {
+    constructor(elem, url, startTime) {
+        this.readyEvent = null;
+        this.name = wrapperNames.shift();
+        this.promise = new Promise((resolve, reject) => {
+            var id = parseIdFromYoutubeURL(url);
+            if(!id) {
+                reject("Could not parse Youtube URL");
+                return
+            }
+
+            this.p = new YT.Player(elem, {
+                height: '300',
+                width: '400',
+                videoId: id,
+                events: {
+                    'onReady': (e) => {
+                        console.log(`got YT onReady for ${this.toString()}, resolving promise`);
+                        this.readyEvent = e;
+                        console.log(`${this.toString()} readyEvent = ${this.readyEvent}`);
+                        resolve(this);
+                    },
+                    'onStateChange': this.onStateChange.bind(this)
+                }
+            })
+        })
+    }
+    onStateChange(e) {
+        console.log("onStateChange");
+    }
+    getPlayer() {
+        return this.readyEvent && this.p;
+    }
+    toString() {
+        return `AsyncPlayerWrapper[${this.name}]`;
+    }
+
+    getCurrentTime() {
+        console.log("async getCurrentTime");
+        return this.promise.then((p) => {
+            console.log("async getCurrentTime inner");
+            return p.p.getCurrentTime();
+        })
+    }
+    setPlaybackRate(r) {
+        console.log("async setPlaybackRate");
+        return this.promise.then((p) => {
+            console.log("async setPlaybackRate inner");
+            return p.p.setPlaybackRate(r);
+        })
+    }
+    loadVideoById(i) {
+        console.log("waiting until promise resolved to call loadVideoByUrl");
+        return this.promise.then((p) => {
+            console.log("promise resolved, calling loadVideoByUrl");
+            return p.p.loadVideoById(i);
+        })
+    }
+    loadVideoByUrl(url) {
+        var id = parseIdFromYoutubeURL(url);
+        if(!id) {
+            return Promise.reject("Could not parse Youtube URL")
+        }
+
+        console.log("waiting until promise resolved to call loadVideoByUrl");
+        return this.promise.then((p) => {
+            console.log("promise resolved, calling loadVideoByUrl");
+            return p.p.loadVideoById(id);
+        })
+    }
+    seekTo(t) {
+        console.log(`${this.toString()} seekTo(${t}`)
+        return this.promise.then((p) => {
+            return p.p.seekTo(t);
+        })
+    }
+    playVideo() {
+        return this.promise.then((p) => {
+            return p.p.playVideo();
+        })
+    }
+    pauseVideo() {
+        return this.promise.then((p) => {
+            return p.p.pauseVideo();
+        })
+    }
+    setVolume(v) {
+        return this.promise.then((p) => {
+            return p.p.setVolume(v);
+        })
+    }
+}
 
 class Looper {
     constructor(elem, url){
         this.startedLoopAt = 0;
         this.playPosError = 0;
         this.loading = true;
-        this.startTime = testStart;
-        this.endTime = testEnd;
+        this.startTime = 0;
+        this.endTime = undefined;
         this.speed = 1.0;
         this.containerElem = elem;
         this.loopTimer = null;
@@ -31,23 +132,39 @@ class Looper {
         return this.Player().getCurrentTime();
     }
     SetSpeed(v) {
-        this.Player().setPlaybackRate(v);
-        this.NextPlayer().setPlaybackRate(v);
-        this.speed = this.Player().getPlaybackRate();
+        return Promise.all([
+            this.Player().setPlaybackRate(v),
+            this.NextPlayer().setPlaybackRate(v)
+        ]).then(() => {
+            return this.Player().getPlaybackRate().then((r) => {
+                this.speed = r;
+            });
+        })
     }
     SetStart() {
-        var pos = this.GetPos();
+        this.GetPos().then((pos) => {
+            this.startTime = pos;
+            this.sync();
+        })
         console.log("setting start point to now");
     }
     SetEnd() {
+        this.GetPos().then((pos) => {
+            this.endTime = pos;
+            this.sync();
+        })
         console.log("setting end point to now");
     }
     IsPlaying() {
-        return this.Player().getPlayerState() == 1;
+        var player = this.Player().getPlayer();
+        console.log("checking IsPlaying, player = ", player);
+        return player && (player.getPlayerState() == 1);
     }
     onPlayerReady(event) {
-        var activePlayer = this.Player();
-
+        console.log("onPlayerReady!");
+        var activePlayer = this.Player().getPlayer();
+        
+        console.log("onPlayerReady, activePlayer= ", activePlayer);
         if(true || this.loading) {
             // little innard hack here: event.target and activePlayer
             // aren't actually the same object, but they have an 'f'
@@ -55,8 +172,6 @@ class Looper {
             // this is gross and may stop working.  Need a reliable way to
             // figure out which Player is throwing this event.
             if(event.target.f == activePlayer.f) {
-                this.startTime = testStart;
-                this.endTime = testEnd;
                 this.loading = false;
                 console.log("active player loaded, seeking to " + this.startTime);
                 event.target.seekTo(this.startTime);
@@ -82,8 +197,8 @@ class Looper {
         console.log("playing next player");
         np.playVideo();
         np.setVolume(100);
-        console.log("pausing last player");
         p.pauseVideo();
+
         this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
     }
     startSyncing() {
@@ -97,11 +212,14 @@ class Looper {
             this.loopTimer = null;
         }
         if(this.IsPlaying()) {
-            var player = this.Player();
+            console.log("IsPlaying (sync)")
+            var player = this.Player().getPlayer();
+
             this.speed = player.getPlaybackRate();
+            console.log("speed is ", this.speed);
             var now = (new Date()).valueOf();
             var offset = (now - this.startedLoopAt) * this.speed;
-            var pos = this.GetPos();
+            var pos = player.getCurrentTime();
 
             var posMS = Math.round(pos * 1000);
             var startMS = Math.round(this.startTime * 1000);
@@ -113,11 +231,16 @@ class Looper {
                 this.playPosError = 0;
             }
 
-            var endTime = Math.min(this.endTime, player.getDuration());            
+            var endTime = this.endTime;
+            if( endTime == undefined || endTime > player.getDuration()) {
+                endTime = player.getDuration();
+                this.endTime = endTime;
+            }
             var timeTilLoop = this.endTime - pos;
-//            console.log("setting timeout for " + timeTilLoop)
+            console.log({timeTilLoop, endTime, pos});
+            console.log("setting timeout for " + timeTilLoop)
             var timeout = (timeTilLoop / this.speed);
-//            console.log("at this speed that is " + timeout + " aka " + timeout*1000 + "ms");
+            console.log("at this speed that is " + timeout + " aka " + timeout*1000 + "ms");
             this.loopTimer = setTimeout(this.doLoop.bind(this), (timeout * 1000) + this.playPosError);
 
             var np = this.NextPlayer();
@@ -147,21 +270,33 @@ class Looper {
         return this.playerElems[(this.currentPlayer+1) % this.players.length];
     }
     LoadURL(url) {
-        YTAPI(window, document).then((YT) => {
+        return YTAPI(window, document).then((YT) => {
             this.loading = true;
-            for(var i=0; i<2; i++) {
-                this.players.push(
-                    new YT.Player(this.playerElems[i], {
-                        height: '300',
-                        width: '400',
-                        videoId: testID,
-                        events: {
-                            'onReady': this.onPlayerReady.bind(this),
-                            'onStateChange': this.onStateChange.bind(this)
-                        }
+            if(this.players.length == 0) {
+                for(var i=0; i<2; i++) {
+                    console.log("pushing player...");
+                    var wp = new AsyncPlayerWrapper(this.playerElems[i], url, this.startTime);
+                    wp.promise.then((p) => {
+                        console.log("calling onPlayerReady with ", wp.readyEvent);
+                        this.onPlayerReady(p.readyEvent);
                     })
-                );
+                    this.players.push(wp);
+                }
+            } else {
+                this.startTime = 0;
+                this.endTime = undefined;
+                for(var i=0; i<2; i++) {
+                    this.players[i].loadVideoByUrl(url);
+                }
             }
+            /*for(var i=0; i<this.players.length; i++) {
+                var p = this.players[i];
+                console.log("calling loadVideoByUrl on ", p);
+                p.loadVideoByUrl(url);
+            }*/
+            
+            this.NextPlayer().pauseVideo();
+            this.NextPlayer().setVolume(0);
         });
     }
 }
