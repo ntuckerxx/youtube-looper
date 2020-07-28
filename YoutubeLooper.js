@@ -50,23 +50,22 @@ class AsyncPlayerWrapper {
     }
 
     getCurrentTime() {
-        console.log("async getCurrentTime");
         return this.promise.then((p) => {
-            console.log("async getCurrentTime inner");
             return p.p.getCurrentTime();
         })
     }
     setPlaybackRate(r) {
-        console.log("async setPlaybackRate");
         return this.promise.then((p) => {
-            console.log("async setPlaybackRate inner");
             return p.p.setPlaybackRate(r);
         })
     }
-    loadVideoById(i) {
-        console.log("waiting until promise resolved to call loadVideoByUrl");
+    getPlaybackRate(r) {
         return this.promise.then((p) => {
-            console.log("promise resolved, calling loadVideoByUrl");
+            return p.p.getPlaybackRate();
+        })
+    }
+    loadVideoById(i) {
+        return this.promise.then((p) => {
             return p.p.loadVideoById(i);
         })
     }
@@ -76,9 +75,7 @@ class AsyncPlayerWrapper {
             return Promise.reject("Could not parse Youtube URL")
         }
 
-        console.log("waiting until promise resolved to call loadVideoByUrl");
         return this.promise.then((p) => {
-            console.log("promise resolved, calling loadVideoByUrl");
             return p.p.loadVideoById(id);
         })
     }
@@ -127,11 +124,30 @@ class Looper {
         this.name = "looper";
     }
 
-    SayHi() {
-        console.log(`Hello from ${this.name}`);
-    }
     GetPos() {
         return this.Player().getCurrentTime();
+    }
+    ClearLoopEndpoints() {
+        this.startTime = 0;
+        this.endTime = undefined;
+        this.sync();
+    }
+    SetLoopParams(url, start, end, speed) {
+        return this.LoadURL(url).then(() => {
+            console.log("Loaded url, setting start/end to ", {start, end})
+            this.startTime = start;
+            this.endTime = end;
+            return true;
+        }).then(() => {
+            console.log("Set start/end, setting speed to ", speed)
+            return this.SetSpeed(speed).then(() => {
+                return this.Player().seekTo(this.startTime)
+            });
+        }).then(() => {
+            console.log(`Set speed, start/end is ${this.startTime}/${this.endTime}, doing sync()`)
+            this.sync();
+            return true;
+        })
     }
     SetSpeed(v) {
         return Promise.all([
@@ -159,7 +175,6 @@ class Looper {
     }
     IsPlaying() {
         var player = this.Player().getPlayer();
-        console.log("checking IsPlaying, player = ", player);
         return player && (player.getPlayerState() == 1);
     }
     onPlayerReady(event) {
@@ -209,19 +224,22 @@ class Looper {
         }
     }
     sync() {
+        function syncdebug(msg) {
+
+        }
         if(this.loopTimer) {
             clearTimeout(this.loopTimer);
             this.loopTimer = null;
         }
         if(this.IsPlaying()) {
-            console.log("IsPlaying (sync)")
+            syncdebug("IsPlaying (sync)")
             var player = this.Player().getPlayer();
 
             this.Player().p.f.style.display = null;
             this.NextPlayer().p.f.style.display = "none";
 
             this.speed = player.getPlaybackRate();
-            console.log("speed is ", this.speed);
+            syncdebug("speed is ", this.speed);
             var now = (new Date()).valueOf();
             var offset = (now - this.startedLoopAt) * this.speed;
             var pos = player.getCurrentTime();
@@ -230,7 +248,7 @@ class Looper {
             var startMS = Math.round(this.startTime * 1000);
 
 //            console.log(`offset is ${offset}, speed = ${this.speed}, got speed= ${player.getPlaybackRate()}`)
-            console.log(`expected pos to be ${startMS + offset}, is ${posMS}, error=${posMS - (startMS + offset)}ms`);
+            syncdebug(`expected pos to be ${startMS + offset}, is ${posMS}, error=${posMS - (startMS + offset)}ms`);
             this.playPosError = (posMS - (startMS + offset));
             if(Math.abs(this.playPosError) > 2000) {
                 this.playPosError = 0;
@@ -242,10 +260,10 @@ class Looper {
                 this.endTime = endTime;
             }
             var timeTilLoop = this.endTime - pos;
-            console.log({timeTilLoop, endTime, pos});
-            console.log("setting timeout for " + timeTilLoop)
+            syncdebug({timeTilLoop, endTime, pos});
+            syncdebug("setting timeout for " + timeTilLoop)
             var timeout = (timeTilLoop / this.speed);
-            console.log("at this speed that is " + timeout + " aka " + timeout*1000 + "ms");
+            syncdebug("at this speed that is " + timeout + " aka " + timeout*1000 + "ms");
             this.loopTimer = setTimeout(this.doLoop.bind(this), (timeout * 1000) + this.playPosError);
 
             var np = this.NextPlayer();
